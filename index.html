@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<meta name="robots" content="noindex, nofollow"/>
+<meta name="theme-color" content="#202124"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Yes Notes"/>
+<title>Yes Notes</title>
+<link rel="manifest" href="/manifest.json"/>
+<link rel="apple-touch-icon" href="/icons/icon-192.png"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<link rel="stylesheet" href="/index.css"/>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="/js/firebase-config.js"></script>
+
+<!-- ══ APP CONFIG ══════════════════════════════════════════════
+     Edit name and icon here. No separate config.js file needed.
+     icon: any Font Awesome class e.g. 'fa-book', 'fa-pen-nib'
+     logoUrl: image URL (overrides icon if set, leave null to use icon)
+════════════════════════════════════════════════════════════════ -->
+<script>
+window.APP_CONFIG = {
+  name:    'Yes Notes',
+  icon:    'fa-book-bookmark',
+  logoUrl: null,
+};
+</script>
+</head>
+<body>
+
+<div id="loading-screen">
+  <div class="loading-logo" id="loading-logo">
+    <i class="fa-solid fa-book-bookmark"></i>
+  </div>
+  <div><div class="loading-bar"><div class="loading-bar-fill"></div></div></div>
+  <div class="loading-label" id="loading-label">Authenticating…</div>
+</div>
+
+<div id="unlock-overlay">
+  <div class="unlock-card">
+    <div style="width:56px;height:56px;background:#004787;border-radius:16px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px;" id="unlock-logo">
+      <i class="fa-solid fa-key" style="font-size:24px;color:#d6e3ff;"></i>
+    </div>
+    <h2>Re-enter Password</h2>
+    <p>Your session key expired. Enter your password to re-open your vault.</p>
+    <input type="password" id="reauth-pwd" placeholder="Password"
+      style="width:100%;padding:14px 16px;border-radius:8px;border:1px solid #6e7170;background:transparent;font-family:Roboto,sans-serif;font-size:16px;color:#e3e3e3;outline:none;margin-bottom:12px;display:block;-webkit-appearance:none;appearance:none;"
+      onkeydown="if(event.key==='Enter')reauth()"/>
+    <div id="reauth-error" style="color:#ffb4ab;font-size:13px;margin-bottom:12px;display:none;"></div>
+    <button onclick="reauth()" id="reauth-btn"
+      style="width:100%;padding:14px;border-radius:50px;border:none;background:#a8c7fa;color:#003060;font-family:Roboto,sans-serif;font-size:14px;font-weight:500;cursor:pointer;margin-bottom:8px;min-height:48px;">
+      <i class="fa-solid fa-unlock"></i> Unlock
+    </button>
+    <button id="signout-btn"
+      style="width:100%;padding:10px;border:none;background:transparent;color:#6e7170;font-family:Roboto,sans-serif;font-size:13px;cursor:pointer;">
+      Sign out instead
+    </button>
+  </div>
+</div>
+
+<div id="app-root"></div>
+
+<script>
+'use strict';
+
+// Apply config to loading screen icon
+(function() {
+  const cfg = window.APP_CONFIG || {};
+  const ll  = document.getElementById('loading-logo');
+  if (cfg.logoUrl) {
+    ll.innerHTML = `<img src="${cfg.logoUrl}" style="width:40px;height:40px;object-fit:contain;border-radius:10px;" alt="logo"/>`;
+  } else if (cfg.icon) {
+    ll.innerHTML = `<i class="fa-solid ${cfg.icon}" style="font-size:28px;color:#d6e3ff;"></i>`;
+  }
+})();
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const _auth = firebase.auth();
+const _db   = firebase.firestore();
+
+let _shellReady = false;
+
+function setLabel(t) {
+  const el = document.getElementById('loading-label');
+  if (el) el.textContent = t;
+}
+
+document.getElementById('signout-btn').onclick = () => {
+  _auth.signOut().then(() => location.replace('/login/'));
+};
+
+async function importKeyHex(hex) {
+  const bytes = new Uint8Array(hex.match(/.{2}/g).map(b => parseInt(b, 16)));
+  return crypto.subtle.importKey('raw', bytes, {name:'AES-GCM',length:256}, false, ['encrypt','decrypt']);
+}
+async function deriveKeyLocal(pwd, uid) {
+  const enc = new TextEncoder();
+  const km  = await crypto.subtle.importKey('raw', enc.encode(pwd), {name:'PBKDF2'}, false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {name:'PBKDF2', salt:enc.encode(uid), iterations:310000, hash:'SHA-256'},
+    km, {name:'AES-GCM',length:256}, false, ['encrypt','decrypt']
+  );
+}
+async function tryDecrypt(blob, key) {
+  const [a,b] = blob.split('.');
+  const iv = Uint8Array.from(atob(a), c => c.charCodeAt(0));
+  const ct = Uint8Array.from(atob(b), c => c.charCodeAt(0));
+  return crypto.subtle.decrypt({name:'AES-GCM',iv}, key, ct);
+}
+
+window._appReady = function() {
+  const ls = document.getElementById('loading-screen');
+  ls.classList.add('fade-out');
+  setTimeout(() => { ls.style.display = 'none'; }, 450);
+  document.getElementById('app-root').classList.add('show');
+};
+
+async function reauth() {
+  const pwd = document.getElementById('reauth-pwd').value;
+  const err = document.getElementById('reauth-error');
+  const btn = document.getElementById('reauth-btn');
+  err.style.display = 'none';
+  if (!pwd) return;
+  const user = _auth.currentUser;
+  if (!user) { location.replace('/login/'); return; }
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+  try {
+    const key  = await deriveKeyLocal(pwd, user.uid);
+    const snap = await _db.collection('users').doc(user.uid).collection('meta').doc('profile').get();
+    if (snap.exists && snap.data().blob) await tryDecrypt(snap.data().blob, key);
+    _shellReady = true;
+    window._appKey  = key;
+    window._appUser = user;
+    window._appDb   = _db;
+    window._appAuth = _auth;
+    document.getElementById('unlock-overlay').classList.remove('show');
+    document.getElementById('loading-screen').style.display = 'flex';
+    setLabel('Loading vault…');
+    await loadApp(user, key);
+  } catch(e) {
+    _shellReady = false;
+    err.textContent = 'Incorrect password. Please try again.';
+    err.style.display = 'block';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-unlock"></i> Unlock';
+  }
+}
+
+// ── CODE LOADER WITH CACHING ──────────────────────────────────
+// Caches app.js + app.css in localStorage for instant loads.
+// The background refresh checks if Firestore has a newer version
+// and silently updates the cache for the NEXT load.
+// Hitting the in-app refresh button (↻) clears the cache so
+// an uploaded code update takes effect immediately.
+const CACHE_KEY = '_codeCache_v2';
+
+async function loadApp(user, key) {
+  try {
+    // Try cache first
+    let cached = null;
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) cached = JSON.parse(raw);
+    } catch {}
+
+    if (cached && cached.js && cached.css) {
+      // Inject cached code — instant load
+      injectCode(cached.css, cached.js, user, key);
+
+      // Background: check for newer version in Firestore
+      _db.collection('code').doc('main').get().then(snap => {
+        if (!snap.exists) return;
+        const {js, css, updatedAt} = snap.data();
+        const newTime    = updatedAt?.toMillis?.() || 0;
+        const cachedTime = cached.updatedAt || 0;
+        if (newTime > cachedTime && js && css) {
+          try {
+            localStorage.setItem(CACHE_KEY, JSON.stringify({js, css, updatedAt: newTime}));
+          } catch {}
+          // Don't reload — changes apply on next open
+        }
+      }).catch(() => {});
+      return;
+    }
+
+    // No cache — fetch from Firestore
+    setLabel('Loading vault…');
+    const snap = await _db.collection('code').doc('main').get();
+    if (!snap.exists) {
+      document.getElementById('loading-screen').innerHTML = `
+        <div style="text-align:center;padding:32px;color:#e3e3e3;max-width:360px;">
+          <i class="fa-solid fa-triangle-exclamation" style="font-size:48px;color:#ffb4ab;display:block;margin-bottom:20px;"></i>
+          <h2 style="font-weight:400;margin-bottom:12px;">App code not uploaded yet</h2>
+          <p style="color:#c4c7c5;font-size:14px;line-height:1.7;">
+            Open <strong>upload-code.html</strong> locally to upload app.js and app.css, then reload.
+          </p>
+        </div>`;
+      return;
+    }
+    const {js, css, updatedAt} = snap.data();
+    // Save to cache
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        js, css, updatedAt: updatedAt?.toMillis?.() || Date.now()
+      }));
+    } catch {}
+    injectCode(css, js, user, key);
+  } catch(e) {
+    setLabel('Error: ' + e.message);
+    console.error('loadApp error:', e);
+  }
+}
+
+function injectCode(css, js, user, key) {
+  if (css) {
+    const s = document.createElement('style');
+    s.textContent = css;
+    document.head.appendChild(s);
+  }
+  window._appUser = user;
+  window._appKey  = key;
+  window._appDb   = _db;
+  window._appAuth = _auth;
+  if (js) {
+    const s = document.createElement('script');
+    s.textContent = js;
+    document.body.appendChild(s);
+  }
+}
+
+_auth.onAuthStateChanged(async user => {
+  if (_shellReady) return;
+  if (!user) { location.replace('/login/'); return; }
+
+  const ekHex = sessionStorage.getItem('_ek');
+  sessionStorage.removeItem('_ek');
+
+  if (ekHex) {
+    _shellReady = true;
+    try {
+      const key = await importKeyHex(ekHex);
+      await loadApp(user, key);
+    } catch {
+      _shellReady = false;
+      document.getElementById('loading-screen').style.display = 'none';
+      document.getElementById('unlock-overlay').classList.add('show');
+      setTimeout(() => document.getElementById('reauth-pwd').focus(), 150);
+    }
+  } else {
+    document.getElementById('loading-screen').style.display = 'none';
+    document.getElementById('unlock-overlay').classList.add('show');
+    setTimeout(() => document.getElementById('reauth-pwd').focus(), 150);
+  }
+});
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+</script>
+</body>
+</html>
