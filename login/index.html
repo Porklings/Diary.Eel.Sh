@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+<meta name="robots" content="noindex, nofollow"/>
+<meta name="theme-color" content="#1a1b1e"/>
+<title>Yes Notes — Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="/js/firebase-config.js"></script>
+<script>
+window.APP_CONFIG = { name: 'Yes Notes', icon: 'fa-book-bookmark', logoUrl: null };
+</script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --md-primary: #a8c7fa; --md-on-primary: #003060;
+  --md-primary-container: #004787; --md-on-primary-cont: #d6e3ff;
+  --md-surface: #131314; --md-surface-2: #1e2022;
+  --md-bg: #202124; --md-on-bg: #e3e3e3;
+  --md-on-sv: #c4c7c5; --md-outline: #8e9192;
+  --md-outline-v: #3f4341; --md-error: #ffb4ab;
+  --ff: 'Roboto', sans-serif;
+}
+html, body {
+  height: 100%; height: 100dvh;
+  font-family: var(--ff); background: var(--md-bg); color: var(--md-on-bg);
+  -webkit-font-smoothing: antialiased; overflow: hidden;
+  overscroll-behavior: none;
+}
+.page {
+  min-height: 100dvh; display: flex; align-items: center;
+  justify-content: center; padding: 24px;
+  position: relative; overflow: hidden;
+}
+.page::before {
+  content: ''; position: absolute; width: 500px; height: 500px;
+  border-radius: 50%; top: -100px; right: -100px;
+  background: radial-gradient(circle, rgba(168,199,250,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.card {
+  background: var(--md-surface); border-radius: 28px;
+  padding: 40px 32px; width: 100%; max-width: 400px;
+  position: relative; z-index: 1;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.brand { text-align: center; margin-bottom: 40px; }
+.brand-icon {
+  width: 64px; height: 64px; background: var(--md-primary-container);
+  border-radius: 20px; display: inline-flex; align-items: center;
+  justify-content: center; margin-bottom: 20px; overflow: hidden;
+}
+.brand-icon img { width: 40px; height: 40px; object-fit: contain; border-radius: 8px; }
+.brand-icon i { font-size: 28px; color: var(--md-on-primary-cont); }
+.brand h1 { font-size: 28px; font-weight: 400; letter-spacing: -0.3px; margin-bottom: 6px; }
+.brand p  { font-size: 14px; color: var(--md-on-sv); }
+.form { display: flex; flex-direction: column; gap: 20px; }
+.tf { position: relative; }
+.tf label {
+  position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
+  font-size: 16px; color: var(--md-on-sv); pointer-events: none;
+  transition: all 0.15s; background: var(--md-surface); padding: 0 4px; z-index: 1;
+}
+.tf input {
+  width: 100%; padding: 16px; border-radius: 8px;
+  border: 1px solid var(--md-outline); background: transparent;
+  font-family: var(--ff); font-size: 16px; color: var(--md-on-bg); outline: none;
+  transition: border-color 0.15s;
+  -webkit-appearance: none; appearance: none;
+}
+.tf input:focus, .tf input:not(:placeholder-shown) { border-color: var(--md-primary); }
+.tf input:focus ~ label, .tf input:not(:placeholder-shown) ~ label {
+  top: 0; font-size: 12px; color: var(--md-primary);
+}
+.tf input::placeholder { color: transparent; }
+.tf-eye {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--md-on-sv); cursor: pointer; font-size: 18px; z-index: 2;
+  background: none; border: none; padding: 4px; line-height: 1;
+}
+.btn {
+  padding: 14px 24px; border-radius: 50px; border: none;
+  background: var(--md-primary); color: var(--md-on-primary);
+  font-family: var(--ff); font-size: 14px; font-weight: 500;
+  cursor: pointer; width: 100%; min-height: 50px;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: opacity 0.15s; -webkit-tap-highlight-color: transparent;
+}
+.btn:hover { opacity: 0.92; }
+.btn:active { opacity: 0.8; }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.err {
+  padding: 14px; border-radius: 12px;
+  background: rgba(255,180,171,0.12); border: 1px solid rgba(255,180,171,0.25);
+  color: var(--md-error); font-size: 13px; line-height: 1.5; display: none;
+}
+.err.show { display: block; }
+.spin {
+  width: 20px; height: 20px; border: 2px solid rgba(0,48,96,0.3);
+  border-top-color: var(--md-on-primary); border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.footer {
+  margin-top: 32px; text-align: center; font-size: 12px;
+  color: var(--md-on-sv); line-height: 1.6;
+}
+.footer i { color: var(--md-primary); margin: 0 2px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="card">
+    <div class="brand">
+      <div class="brand-icon" id="brand-icon">
+        <i class="fa-solid fa-book-heart"></i>
+      </div>
+      <h1 id="brand-name">Yes Notes</h1>
+      <p>Your private memory vault</p>
+    </div>
+    <form class="form" onsubmit="handleLogin(event)">
+      <div class="tf">
+        <input type="email" id="email" placeholder=" " autocomplete="email"
+          autocorrect="off" autocapitalize="none" spellcheck="false" required/>
+        <label for="email">Email address</label>
+      </div>
+      <div class="tf">
+        <input type="password" id="password" placeholder=" " autocomplete="current-password" required/>
+        <label for="password">Password</label>
+        <button type="button" class="tf-eye" id="pwd-eye" onclick="togglePwd()">
+          <i class="fa-solid fa-eye-slash"></i>
+        </button>
+      </div>
+      <div class="err" id="err"></div>
+      <button type="submit" class="btn" id="btn-login">
+        <i class="fa-solid fa-lock-open"></i> Unlock Vault
+      </button>
+    </form>
+    <div class="footer">
+      <i class="fa-solid fa-shield-halved"></i>
+      Your data is encrypted client-side.<br/>Your password never leaves your device unencrypted.
+    </div>
+  </div>
+</div>
+
+<script>
+// Apply config
+(function() {
+  const cfg = window.APP_CONFIG || {};
+  if (cfg.name) {
+    document.title = cfg.name + ' — Sign In';
+    document.getElementById('brand-name').textContent = cfg.name;
+  }
+  const icon = document.getElementById('brand-icon');
+  if (cfg.logoUrl) {
+    icon.innerHTML = `<img src="${cfg.logoUrl}" alt="logo"/>`;
+  } else if (cfg.icon) {
+    icon.innerHTML = `<i class="fa-solid ${cfg.icon}"></i>`;
+  }
+})();
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+
+// Auto-focus email
+window.addEventListener('load', () => {
+  setTimeout(() => document.getElementById('email')?.focus(), 80);
+});
+
+auth.onAuthStateChanged(user => {
+  if (user && sessionStorage.getItem('_ek')) window.location.replace('/');
+});
+
+function togglePwd() {
+  const inp = document.getElementById('password');
+  const ico = document.getElementById('pwd-eye').querySelector('i');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+  ico.className = inp.type === 'password' ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+}
+
+async function deriveKey(pwd, uid) {
+  const enc = new TextEncoder();
+  const km = await crypto.subtle.importKey('raw', enc.encode(pwd), {name:'PBKDF2'}, false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {name:'PBKDF2', salt:enc.encode(uid), iterations:310000, hash:'SHA-256'},
+    km, {name:'AES-GCM', length:256}, true, ['encrypt','decrypt']
+  );
+}
+async function exportKey(key) {
+  const raw = await crypto.subtle.exportKey('raw', key);
+  return Array.from(new Uint8Array(raw)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById('email').value.trim();
+  const pwd   = document.getElementById('password').value;
+  const btn   = document.getElementById('btn-login');
+  const err   = document.getElementById('err');
+  err.classList.remove('show');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spin"></div>';
+  try {
+    const cred   = await auth.signInWithEmailAndPassword(email, pwd);
+    const key    = await deriveKey(pwd, cred.user.uid);
+    const keyHex = await exportKey(key);
+    sessionStorage.setItem('_ek', keyHex);
+    window.location.replace('/');
+  } catch(ex) {
+    const msgs = {
+      'auth/user-not-found':    'No account found with that email.',
+      'auth/wrong-password':    'Incorrect password.',
+      'auth/invalid-credential':'Invalid email or password.',
+      'auth/too-many-requests': 'Too many attempts — please wait a moment.',
+      'auth/invalid-email':     "That doesn't look like a valid email.",
+    };
+    err.textContent = msgs[ex.code] || 'Error: ' + ex.message;
+    err.classList.add('show');
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-lock-open"></i> Unlock Vault';
+  }
+}
+</script>
+</body>
+</html>
