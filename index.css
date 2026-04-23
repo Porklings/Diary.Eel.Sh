@@ -1,0 +1,67 @@
+/* ================================================================
+   MEMORIA — Public Shell Styles (loading screen only)
+   Full app styles are injected dynamically from Firestore.
+   ================================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --md-primary: #a8c7fa;
+  --md-surface: #131314;
+  --md-background: #202124;
+  --md-on-background: #e3e3e3;
+  --md-on-surface-variant: #c4c7c5;
+  --ff: 'Roboto', sans-serif;
+}
+html {
+  /* iOS 26 "Liquid Glass" grey bar fix:
+     Safari reads html/body background to paint its chrome.
+     Setting it to our app background colour makes the bar invisible. */
+  background: #202124;
+  min-height: calc(100% + env(safe-area-inset-top));
+}
+body {
+  height: 100dvh;
+  font-family: var(--ff);
+  background: #202124;
+  color: var(--md-on-background);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+#loading-screen {
+  position: fixed; inset: 0;
+  background: #202124;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 24px; z-index: 9999;
+  transition: opacity 0.4s ease;
+}
+#loading-screen.fade-out { opacity: 0; pointer-events: none; }
+.loading-logo {
+  width: 64px; height: 64px;
+  background: #004787; border-radius: 20px;
+  display: flex; align-items: center; justify-content: center;
+}
+.loading-logo i { font-size: 28px; color: #d6e3ff; }
+.loading-label { font-size: 13px; font-weight: 500; color: var(--md-on-surface-variant); letter-spacing: 0.5px; }
+.loading-bar { width: 200px; height: 4px; background: rgba(168,199,250,0.15); border-radius: 2px; overflow: hidden; }
+.loading-bar-fill { height: 100%; border-radius: 2px; background: var(--md-primary); animation: ldp 1.4s ease infinite; }
+@keyframes ldp { 0%{width:0%;margin-left:0} 50%{width:70%;margin-left:15%} 100%{width:0%;margin-left:100%} }
+#unlock-overlay {
+  position: fixed; inset: 0;
+  background: var(--md-background);
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 24px; z-index: 9998;
+}
+#unlock-overlay.show { display: flex; }
+.unlock-card {
+  background: var(--md-surface);
+  border-radius: 28px; padding: 40px 32px;
+  width: 100%; max-width: 380px;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.unlock-card h2 { font-size: 22px; font-weight: 400; margin-bottom: 8px; }
+.unlock-card p { font-size: 14px; color: var(--md-on-surface-variant); margin-bottom: 24px; line-height: 1.6; }
+#app-root { position: fixed; inset: 0; display: none; overflow: hidden; }
+#app-root.show { display: block; }
